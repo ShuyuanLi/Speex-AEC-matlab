@@ -456,16 +456,17 @@ speex_mdf_out.var1 = dbg.var1;
                 st.memE(chan) = tmp_out;
             end
             
+			%（22）误差缓冲区移动，为下一帧处理做好准备
             % Compute error signal (filter update version) */
             st.e(st.frame_size+1:N, chan) = st.e(1:st.frame_size, chan);
             st.e(1:st.frame_size, chan) = 0;
-            % st.e : [ zeros | out background ]
+            % 误差缓冲区格式st.e : [ zeros | out background ]
   
-            % Compute a bunch of correlations */
+            % 计算相关性 Compute a bunch of correlations */
             % FIXME: bad merge */
-            Sey = Sey + sum(st.e(st.frame_size+1:N, chan) .* st.y(st.frame_size+1:N, chan));
-            Syy = Syy + sum(st.y(st.frame_size+1:N, chan).^2);
-            Sdd = Sdd + sum(st.input.^2);
+            Sey = Sey + sum(st.e(st.frame_size+1:N, chan) .* st.y(st.frame_size+1:N, chan));%计算e和x的相关性
+            Syy = Syy + sum(st.y(st.frame_size+1:N, chan).^2);%计算Y的自相关
+            Sdd = Sdd + sum(st.input.^2);%计算输入的相关性
             
             % Convert error to frequency domain */
             % MATLAB_MATCH: we divide by N to get values as in speex
@@ -475,6 +476,7 @@ speex_mdf_out.var1 = dbg.var1;
             % MATLAB_MATCH: we divide by N to get values as in speex
             st.Y = fft(st.y) / N;
             
+			%计算功率频谱
             % Compute power spectrum of echo (X), error (E) and filter response (Y) */
             st.Rf = abs(st.E(1:st.frame_size+1,chan)).^2;
             st.Yf = abs(st.Y(1:st.frame_size+1,chan)).^2;
@@ -509,12 +511,13 @@ speex_mdf_out.var1 = dbg.var1;
         % Smooth far end energy estimate over time */
         st.power = ss_1*st.power+ 1 + ss*st.Xf;
         
-        % Compute filtered spectra and (cross-)correlations */
-        
+        % 计算过滤器光谱和（交叉）相关性Compute filtered spectra and (cross-)correlations */
+
         Eh_cur = st.Rf - st.Eh;
         Yh_cur = st.Yf - st.Yh;
         Pey_cur = Pey_cur + sum(Eh_cur.*Yh_cur) ;
         Pyy_cur = Pyy_cur + sum(Yh_cur.^2);
+		%更新st.Eh，st.Yh
         st.Eh = (1-st.spec_average)*st.Eh + st.spec_average*st.Rf;
         st.Yh = (1-st.spec_average)*st.Yh + st.spec_average*st.Yf;
         
@@ -529,7 +532,7 @@ speex_mdf_out.var1 = dbg.var1;
         alpha = tmp32/ See;
         alpha_1 = 1- alpha;
         
-        % Update correlations (recursive average) */
+        % 更新相关性（递归平均值）Update correlations (recursive average) */
         st.Pey = alpha_1*st.Pey + alpha*Pey;
         st.Pyy = alpha_1*st.Pyy + alpha*Pyy;
         
@@ -546,7 +549,7 @@ speex_mdf_out.var1 = dbg.var1;
             st.Pey = st.Pyy;
         end
         
-        % leak_estimate is the linear regression result */
+        % 泄漏系数leak_estimate is the linear regression result */
         st.leak_estimate = st.Pey/st.Pyy;
         
         % This looks like a stupid bug, but it's right (because we convert from Q14 to Q15) */
@@ -708,3 +711,20 @@ speex_mdf_out.var1 = dbg.var1;
 
 end
 
+%---
+function [out, st] = speex_echo_cancellation_mdf(st, in, far_end)
+St:主结构体
+In：近端信号，microphone输入数据
+far_end：远端信号，也就是喇叭speaker信号
+
+st.input 是近端麦克风信号去直流后的数据
+St.memD  是st.input 经过st.preemph系数平滑滤波后的数据
+
+st.x 远端喇叭信号，每次把后st.frame_size个数据以为到前半部分，然后将far_end数据平滑处理存储到st.x前半部分
+st.memX 是far_end数据
+st.X是st.x经过fft变换后的数据
+
+
+Sxx
+Syy
+%
